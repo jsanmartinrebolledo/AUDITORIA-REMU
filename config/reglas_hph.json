@@ -1,0 +1,42 @@
+{
+  "nombre_app": "Auditor Remuneracional Ley Médica HPH",
+  "institucion": "Hospital Padre Alberto Hurtado",
+  "advertencia": "La aplicación entrega alertas y diferencias objetivas; no reemplaza la revisión administrativa ni jurídica.",
+  "umbral_alerta_media": 100000,
+  "umbral_alerta_alta": 500000,
+  "llave_por_defecto": [
+    "RUN",
+    "DV",
+    "LEY",
+    "CARGO_CORRELATIVO",
+    "JORNADA",
+    "CENTRO_COSTO",
+    "CODIGO_HABER"
+  ],
+  "campos_obligatorios": [
+    "RUN",
+    "MONTO",
+    "CODIGO_HABER"
+  ],
+  "causas_conservadoras": [
+    "Funcionario nuevo",
+    "Funcionario ausente",
+    "Cambio de jornada",
+    "Cambio de ley",
+    "Cambio de unidad o centro de costo",
+    "Cambio de cargo o correlativo",
+    "Trienios / antigüedad",
+    "Experiencia calificada EDF/EPS",
+    "Reforzamiento profesional diurno",
+    "Asignación de responsabilidad",
+    "Asignación de estímulo / competencias",
+    "Jornadas prioritarias",
+    "Proyecto específico",
+    "Especialidad / permanencia",
+    "Planilla suplementaria HPH",
+    "Días trabajados / ausentismo",
+    "Retroactivo / accesorio",
+    "Diferencia no clasificada",
+    "Requiere revisión manual"
+  ]
+}
