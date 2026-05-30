@@ -701,6 +701,7 @@ TOP_DETAIL_COLUMNS = [
     "Ley",
     "Código haber",
     "Nombre haber",
+    "TIPO_DIFERENCIA",
     "Monto anterior",
     "Monto actual",
     "Diferencia",
@@ -709,6 +710,9 @@ TOP_DETAIL_COLUMNS = [
 
 
 def build_summary_tables(detail: pd.DataFrame) -> dict[str, pd.DataFrame]:
+    if "TIPO_DIFERENCIA" not in detail.columns and not detail.empty:
+        detail = detail.copy()
+        detail["TIPO_DIFERENCIA"] = "Diferencia de monto"
     if "Diferencia absoluta" not in detail.columns and "Diferencia" in detail.columns:
         detail = detail.copy()
         detail["Diferencia absoluta"] = detail["Diferencia"].abs()
@@ -724,6 +728,7 @@ def build_summary_tables(detail: pd.DataFrame) -> dict[str, pd.DataFrame]:
                     "Diferencia neta",
                     "Diferencia absoluta total",
                     "Cantidad de funcionarios afectados",
+                    "Principal TIPO_DIFERENCIA",
                 ]
             ),
             "top_funcionarios": pd.DataFrame(
@@ -733,6 +738,7 @@ def build_summary_tables(detail: pd.DataFrame) -> dict[str, pd.DataFrame]:
                     "Ley",
                     "Diferencia neta",
                     "Diferencia absoluta total",
+                    "Principal TIPO_DIFERENCIA",
                     "Principal causa probable",
                 ]
             ),
@@ -741,6 +747,10 @@ def build_summary_tables(detail: pd.DataFrame) -> dict[str, pd.DataFrame]:
     increases = detail[detail["Diferencia"] > 0].sort_values("Diferencia", ascending=False).head(10)
     decreases = detail[detail["Diferencia"] < 0].sort_values("Diferencia", ascending=True).head(10)
 
+    def principal_cause(values: pd.Series) -> str:
+        counts = values.value_counts()
+        return counts.index[0] if not counts.empty else ""
+
     top_codes = (
         detail.groupby(["Código haber", "Nombre haber"], dropna=False)
         .agg(
@@ -748,6 +758,7 @@ def build_summary_tables(detail: pd.DataFrame) -> dict[str, pd.DataFrame]:
                 "Diferencia neta": ("Diferencia", "sum"),
                 "Diferencia absoluta total": ("Diferencia absoluta", "sum"),
                 "Cantidad de funcionarios afectados": ("RUN", "nunique"),
+                "Principal TIPO_DIFERENCIA": ("TIPO_DIFERENCIA", principal_cause),
             }
         )
         .reset_index()
@@ -755,16 +766,13 @@ def build_summary_tables(detail: pd.DataFrame) -> dict[str, pd.DataFrame]:
         .head(20)
     )
 
-    def principal_cause(values: pd.Series) -> str:
-        counts = values.value_counts()
-        return counts.index[0] if not counts.empty else ""
-
     top_staff = (
         detail.groupby(["RUN", "Nombre", "Ley"], dropna=False)
         .agg(
             **{
                 "Diferencia neta": ("Diferencia", "sum"),
                 "Diferencia absoluta total": ("Diferencia absoluta", "sum"),
+                "Principal TIPO_DIFERENCIA": ("TIPO_DIFERENCIA", principal_cause),
                 "Principal causa probable": ("Causa probable", principal_cause),
             }
         )
@@ -809,17 +817,31 @@ def build_summary_dataframe(summary: dict[str, Any], previous_name: str, current
     return pd.DataFrame(rows, columns=["Indicador", "Valor"])
 
 
+def normalize_detail_output(detail: pd.DataFrame, code_length: int = DEFAULT_HABER_CODE_LENGTH) -> pd.DataFrame:
+    if detail.empty:
+        return detail.copy()
+    normalized = detail.copy()
+    if "TIPO_DIFERENCIA" not in normalized.columns:
+        normalized["TIPO_DIFERENCIA"] = "Diferencia de monto"
+    if "Ley" in normalized.columns:
+        normalized["Ley"] = normalized["Ley"].map(format_law_text)
+    if "Código haber" in normalized.columns:
+        normalized["Código haber"] = normalized["Código haber"].map(lambda value: format_haber_code(value, code_length))
+    if "Diferencia absoluta" not in normalized.columns and "Diferencia" in normalized.columns:
+        normalized["Diferencia absoluta"] = normalized["Diferencia"].abs()
+    return normalized
+
+
 def export_report_excel(
     detail: pd.DataFrame,
     summary: dict[str, Any],
     previous_name: str,
     current_name: str,
     config_used: pd.DataFrame | None = None,
+    code_length: int = DEFAULT_HABER_CODE_LENGTH,
 ) -> bytes:
     buffer = io.BytesIO()
-    if "Diferencia absoluta" not in detail.columns and "Diferencia" in detail.columns:
-        detail = detail.copy()
-        detail["Diferencia absoluta"] = detail["Diferencia"].abs()
+    detail = normalize_detail_output(detail, code_length)
     summary_df = build_summary_dataframe(summary, previous_name, current_name, detail)
     summary_tables = build_summary_tables(detail)
 
@@ -880,6 +902,12 @@ def export_report_excel(
         for sheet in workbook.worksheets:
             sheet.freeze_panes = "A2"
             headers = {cell.value: cell.column for cell in sheet[1] if cell.value is not None}
+            for text_column in ["Ley", "Código haber"]:
+                column_index = headers.get(text_column)
+                if column_index is None:
+                    continue
+                for row_cells in sheet.iter_rows(min_row=2, min_col=column_index, max_col=column_index):
+                    row_cells[0].number_format = "@"
             for money_column in MONEY_COLUMNS:
                 column_index = headers.get(money_column)
                 if column_index is None:
@@ -960,21 +988,52 @@ def style_money_columns(df: pd.DataFrame):
     return df.style.format(formatters) if formatters else df
 
 
-def render_executive_summary(detail: pd.DataFrame) -> None:
+def render_executive_summary(detail: pd.DataFrame, summary: dict[str, Any]) -> None:
     st.subheader("Resumen ejecutivo")
     tables = build_summary_tables(detail)
-    sections = [
-        ("Principales aumentos", tables["principales_aumentos"]),
-        ("Principales disminuciones", tables["principales_disminuciones"]),
-        ("Top códigos con mayor variación", tables["top_codigos"]),
-        ("Top funcionarios con mayor diferencia absoluta", tables["top_funcionarios"]),
+    tabs = st.tabs(
+        [
+            "Indicadores generales",
+            "Principales aumentos",
+            "Principales disminuciones",
+            "Top códigos",
+            "Top funcionarios",
+            "Alertas",
+        ]
+    )
+
+    with tabs[0]:
+        indicators = pd.DataFrame(
+            [
+                {"Indicador": "Total diferencias", "Valor": summary.get("Total de diferencias detectadas", 0)},
+                {"Indicador": "Diferencia positiva total", "Valor": format_money(summary.get("Diferencia positiva total", 0))},
+                {"Indicador": "Diferencia negativa total", "Valor": format_money(summary.get("Diferencia negativa total", 0))},
+                {"Indicador": "Diferencia neta", "Valor": format_money(summary.get("Diferencia neta", 0))},
+                {"Indicador": "Alertas altas", "Valor": summary.get("Cantidad de casos de alerta alta", 0)},
+                {"Indicador": "Casos revisión manual", "Valor": summary.get("Cantidad de casos que requieren revisión manual", 0)},
+            ]
+        )
+        st.dataframe(indicators, use_container_width=True, hide_index=True)
+
+    tab_tables = [
+        (tabs[1], tables["principales_aumentos"]),
+        (tabs[2], tables["principales_disminuciones"]),
+        (tabs[3], tables["top_codigos"]),
+        (tabs[4], tables["top_funcionarios"]),
     ]
-    for title, table in sections:
-        st.markdown(f"**{title}**")
-        if table.empty:
-            st.caption("Sin casos para mostrar.")
+    for tab, table in tab_tables:
+        with tab:
+            if table.empty:
+                st.caption("Sin casos para mostrar.")
+            else:
+                st.dataframe(style_money_columns(table), use_container_width=True, hide_index=True)
+
+    with tabs[5]:
+        alerts = detail[detail["Nivel de alerta"].isin(["Medio", "Alto", "Revisión manual"])] if not detail.empty else detail
+        if alerts.empty:
+            st.caption("Sin alertas para mostrar.")
         else:
-            st.dataframe(style_money_columns(table), use_container_width=True, hide_index=True)
+            st.dataframe(style_money_columns(alerts), use_container_width=True, hide_index=True)
 
 
 def filter_results(detail: pd.DataFrame) -> pd.DataFrame:
@@ -1025,12 +1084,15 @@ def render_charts(detail: pd.DataFrame) -> None:
     st.subheader("Gráficos simples")
     positive = detail.loc[detail["Diferencia"] > 0, "Diferencia"].sum()
     negative = detail.loc[detail["Diferencia"] < 0, "Diferencia"].sum()
+    st.markdown("**Variación positiva vs negativa**")
     st.bar_chart(pd.DataFrame({"Monto": [positive, negative]}, index=["Positiva", "Negativa"]))
 
     left, right = st.columns(2)
     with left:
+        st.markdown("**Diferencias por causa probable**")
         st.bar_chart(detail["Causa probable"].value_counts())
     with right:
+        st.markdown("**Diferencias por nivel de alerta**")
         st.bar_chart(detail["Nivel de alerta"].value_counts())
 
     top = (
@@ -1042,6 +1104,7 @@ def render_charts(detail: pd.DataFrame) -> None:
     )
     if not top.empty:
         top["Funcionario"] = top["RUN"].astype(str) + " - " + top["Nombre"].astype(str)
+        st.markdown("**Top funcionarios por diferencia absoluta**")
         st.bar_chart(top.set_index("Funcionario")["Diferencia_abs"])
 
 
@@ -1124,6 +1187,15 @@ def main() -> None:
         medium_threshold = st.number_input("Umbral alerta media", min_value=0.0, value=100_000.0, step=10_000.0)
     with right:
         high_threshold = st.number_input("Umbral alerta alta", min_value=0.0, value=500_000.0, step=10_000.0)
+    code_length = int(
+        st.number_input(
+            "Largo código de haber",
+            min_value=1,
+            max_value=12,
+            value=DEFAULT_HABER_CODE_LENGTH,
+            step=1,
+        )
+    )
 
     st.header("Sección 5: Ejecutar auditoría")
     if st.button("Ejecutar auditoría", type="primary", disabled=not can_execute):
@@ -1135,6 +1207,7 @@ def main() -> None:
             key_fields,
             medium_threshold=medium_threshold,
             high_threshold=high_threshold,
+            code_length=code_length,
         )
         st.session_state["detail"] = detail
         st.session_state["summary"] = summary
@@ -1149,8 +1222,10 @@ def main() -> None:
                 {"Campo": "Llave", "Mes anterior": ", ".join(key_fields), "Mes actual": ", ".join(key_fields)},
                 {"Campo": "Umbral alerta media", "Mes anterior": medium_threshold, "Mes actual": medium_threshold},
                 {"Campo": "Umbral alerta alta", "Mes anterior": high_threshold, "Mes actual": high_threshold},
+                {"Campo": "Largo código de haber", "Mes anterior": code_length, "Mes actual": code_length},
             ]
         )
+        st.session_state["code_length"] = code_length
 
     if "detail" not in st.session_state:
         st.stop()
@@ -1166,7 +1241,7 @@ def main() -> None:
     col4.metric("Diferencia neta", format_money(summary["Diferencia neta"]))
     col5.metric("Alertas altas", summary["Cantidad de casos de alerta alta"])
     col6.metric("Revisión manual", summary["Cantidad de casos que requieren revisión manual"])
-    render_executive_summary(detail)
+    render_executive_summary(detail, summary)
 
     if detail.empty:
         st.success("No se detectaron diferencias con la configuración actual.")
@@ -1182,6 +1257,7 @@ def main() -> None:
         st.session_state["previous_name"],
         st.session_state["current_name"],
         st.session_state.get("config_used"),
+        st.session_state.get("code_length", DEFAULT_HABER_CODE_LENGTH),
     )
     st.download_button(
         "Descargar reporte Excel",

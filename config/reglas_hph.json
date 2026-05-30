@@ -4,14 +4,17 @@
   "advertencia": "La aplicación entrega alertas y diferencias objetivas; no reemplaza la revisión administrativa ni jurídica.",
   "umbral_alerta_media": 100000,
   "umbral_alerta_alta": 500000,
+  "largo_codigo_haber": 4,
   "llave_por_defecto": [
     "RUN",
     "DV",
     "LEY",
-    "CARGO_CORRELATIVO",
     "JORNADA",
+    "CARGO_CORRELATIVO",
+    "CORR_PAGO",
     "CENTRO_COSTO",
-    "CODIGO_HABER"
+    "CODIGO_HABER",
+    "TIPO_PROCESO"
   ],
   "campos_obligatorios": [
     "RUN",

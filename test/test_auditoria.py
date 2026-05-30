@@ -92,6 +92,52 @@ def test_compare_detects_amount_and_new_code():
     assert summary["Cantidad de casos que requieren revisión manual"] == 0
 
 
+def test_law_and_haber_code_are_formatted_as_text():
+    previous = pd.DataFrame(
+        [[11111111, "1", "Ana Torres", "19.664000", 44, "1", "MED", 21, "Trienios", 120000]],
+        columns=[
+            "RUN",
+            "DV",
+            "Nombre",
+            "Ley",
+            "Jornada",
+            "Cargo",
+            "Centro de costo",
+            "Codigo haber",
+            "Nombre haber",
+            "Monto",
+        ],
+    )
+    current = previous.copy()
+    current.loc[0, "Monto"] = 150000
+    mapping = {
+        "RUN": "RUN",
+        "DV": "DV",
+        "NOMBRE": "Nombre",
+        "LEY": "Ley",
+        "JORNADA": "Jornada",
+        "CARGO_CORRELATIVO": "Cargo",
+        "UNIDAD": None,
+        "CENTRO_COSTO": "Centro de costo",
+        "CODIGO_HABER": "Codigo haber",
+        "NOMBRE_HABER": "Nombre haber",
+        "MONTO": "Monto",
+        "PORCENTAJE": None,
+    }
+
+    detail, _ = compare_dataframes(
+        previous,
+        current,
+        mapping,
+        mapping,
+        ["RUN", "DV", "LEY", "JORNADA", "CARGO_CORRELATIVO", "CENTRO_COSTO", "CODIGO_HABER"],
+    )
+
+    assert detail.loc[0, "Ley"] == "19.664"
+    assert detail.loc[0, "Código haber"] == "0021"
+    assert detail.loc[0, "TIPO_DIFERENCIA"] == "Diferencia de monto"
+
+
 def test_export_report_generates_workbook_bytes():
     detail = pd.DataFrame(
         [

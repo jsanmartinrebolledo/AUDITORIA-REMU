@@ -54,17 +54,22 @@ La app reconoce alias habituales como `CODIGO_MOVIMIENTO`, `NOMBRE_MOVIMIENTO`, 
 
 Si no se mapea RUN, Monto o Código de haber, la app bloquea la ejecución. Sin Código de haber no es posible auditar por línea remuneracional.
 
+El código de haber se trata como texto y se rellena con ceros a la izquierda. El largo por defecto es de 4 dígitos y puede ajustarse en la configuración de auditoría. La Ley también se trata como texto para evitar valores como `19.664000`.
+
 ## Interpretación de resultados
 
 La app separa:
 
 - Diferencia detectada objetivamente.
+- Tipo de diferencia.
 - Causa probable.
 - Observación.
 - Nivel de alerta.
 - Dato faltante, cuando corresponde.
 
-El clasificador usa palabras clave presentes principalmente en el código y nombre del haber. Identifica categorías como trienios/antigüedad, experiencia calificada EDF/EPS, reforzamiento profesional diurno, responsabilidad, estímulo/competencias, jornadas prioritarias, proyecto específico, especialidad/permanencia, planilla suplementaria HPH, días trabajados/ausentismo y retroactivos/accesorios.
+`TIPO_DIFERENCIA` separa hechos como código nuevo, código eliminado, funcionario nuevo, funcionario ausente, diferencia de monto, registro consolidado o revisión requerida.
+
+`Causa probable` clasifica el haber usando palabras clave presentes principalmente en el código y nombre del haber. Identifica categorías como sueldo base, trienios/antigüedad, experiencia calificada EDF/EPS, reforzamiento profesional diurno, responsabilidad, estímulo/competencias, jornadas prioritarias, proyecto específico, especialidad/permanencia, planilla suplementaria HPH, días trabajados/ausentismo y retroactivos/accesorios.
 
 Si no hay señales suficientes, la causa queda como `Diferencia no clasificada`. `Revisión manual` se reserva para datos mínimos faltantes, montos no numéricos o llaves duplicadas críticas.
 
